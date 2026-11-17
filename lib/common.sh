@@ -53,11 +53,18 @@ gitea_token() {
   [[ -s "$SECRETS_DIR/gitea-admin-token" ]] || die "no Gitea admin token; run: lab services up"
   cat "$SECRETS_DIR/gitea-admin-token"
 }
-gitea_api() { # METHOD PATH [JSON]
-  local method=$1 path=$2 data=${3:-}
-  local args=(-sS --fail-with-body -X "$method" -H "Authorization: token $(gitea_token)" -H 'Accept: application/json')
+gitea_api() { # METHOD PATH [JSON] — prints the response body; on HTTP error shows Gitea's message
+  local method=$1 path=$2 data=${3:-} body code
+  local args=(-sS -X "$method" -H "Authorization: token $(gitea_token)" -H 'Accept: application/json' -w '\n%{http_code}')
   if [[ -n $data ]]; then args+=(-H 'Content-Type: application/json' --data "$data"); fi
-  curl "${args[@]}" "$GITEA_API_URL/api/v1$path"
+  body=$(curl "${args[@]}" "$GITEA_API_URL/api/v1$path") || die "Gitea unreachable at $GITEA_API_URL"
+  code=${body##*$'\n'}
+  body=${body%$'\n'*}
+  if [[ $code != 2* ]]; then
+    warn "Gitea API $method $path -> HTTP $code: $(jq -r '.message // .' <<<"$body" 2>/dev/null || echo "$body")"
+    return 1
+  fi
+  printf '%s\n' "$body"
 }
 gitea_exists() { # PATH -> 0 if GET returns 200
   [[ $(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: token $(gitea_token)" "$GITEA_API_URL/api/v1$1") == 200 ]]

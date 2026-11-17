@@ -65,7 +65,6 @@ if [[ -z $team_id ]]; then
   team_id=$(gitea_api POST "/orgs/$org/teams" "$(jq -n '{
       name: "agents", description: "AI coding agents", permission: "write",
       includes_all_repositories: true, can_create_org_repo: false,
-      units: ["repo.code","repo.pulls","repo.issues","repo.actions","repo.packages","repo.wiki","repo.releases"],
       units_map: {"repo.code":"write","repo.pulls":"write","repo.issues":"write","repo.actions":"read",
                   "repo.packages":"write","repo.wiki":"write","repo.releases":"read"}
     }')" | jq -r .id)
