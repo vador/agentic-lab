@@ -70,6 +70,9 @@ if [[ $role != base ]]; then
 fi
 if [[ $role == ci ]]; then
   printf 'RUNNER_TOKEN=%s\n' "$(<"$SECRETS_DIR/runner-token")" >"$tmp/secrets.env"
+  if [[ -s $SECRETS_DIR/checks-reader.token ]]; then  # see lab checks publish
+    printf 'CHECKS_TOKEN=%s\nCHECKS_ORG=%s\n' "$(<"$SECRETS_DIR/checks-reader.token")" "$CHECKS_ORG" >>"$tmp/secrets.env"
+  fi
   files+=("$tmp/secrets.env|/etc/agentlab/secrets.env|0600")
 fi
 cloudinit_user_data "$tmp/user-data" "$name" "${files[@]}"

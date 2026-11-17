@@ -22,6 +22,7 @@ agentlab — isolated agentic-coding lab (KVM VMs + Gitea + CI + cloud emulators
 
   lab project new <org> [--repo R] [--vm VM] [--no-vm]
   lab project protect <org> [--repo R] [--checks "..."]   (re)apply main protection + required CI checks
+  lab checks publish [--tag v1]  publish checks/ to the human-owned $CHECKS_ORG/checks repo
 
 Typical first run:
   lab host install && (log out/in) && lab services up && lab vm golden \
@@ -51,5 +52,6 @@ case "$area/$sub" in
   vm/*)           exec "$ROOT/vm/vmctl.sh" "${sub:-help}" "$@" ;;
   project/new)     exec "$ROOT/projects/new-project.sh" "$@" ;;
   project/protect) exec "$ROOT/projects/protect.sh" "$@" ;;
+  checks/publish)  exec "$ROOT/projects/publish-checks.sh" "$@" ;;
   *) usage ;;
 esac

@@ -63,3 +63,20 @@ jobs:
           for i in $(seq 1 30); do curl -s -o /dev/null http://floci:4566/ && exit 0; sleep 2; done
           echo "Floci did not start" >&2; exit 1
       - run: make test-e2e
+
+  # ── Human-owned checks (platform/checks): agents cannot change what these enforce ──
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: __GITEA_URL__/platform/checks@v1
+        with: { mode: guard }
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: __GITEA_URL__/platform/checks@v1
+        with: { mode: security }

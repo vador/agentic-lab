@@ -1,0 +1,18 @@
+name: agentlab checks
+description: >
+  Human-owned checks run on every PR. Agents cannot change them: they live in platform/checks,
+  which bot users have no access to. Published from the agentlab repo with `lab checks publish`.
+inputs:
+  mode:
+    description: "guard (test + pipeline integrity) or security (secrets, vulnerable deps, misconfig)"
+    required: true
+  human-only-paths:
+    description: Extended regex of paths that only humans may change in a PR
+    default: '^\.gitea/|(^|/)\.trivyignore(\.yaml)?$|(^|/)trivy\.ya?ml$|(^|/)\.gitleaks(ignore|\.toml)$'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: '"${{ github.action_path }}/bin/run.sh" "${{ inputs.mode }}"'
+      env:
+        HUMAN_ONLY_PATHS: ${{ inputs.human-only-paths }}

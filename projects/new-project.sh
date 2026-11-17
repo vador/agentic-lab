@@ -71,6 +71,11 @@ if [[ -z $team_id ]]; then
 fi
 gitea_api PUT "/teams/$team_id/members/$bot" >/dev/null
 
+# --- human-owned checks used by the template's guard/security jobs ---------------------------------
+if ! gitea_exists "/repos/$CHECKS_ORG/checks"; then
+  "$LAB_ROOT/projects/publish-checks.sh"
+fi
+
 # --- repository, seeded from the template -----------------------------------------------------
 if ! gitea_exists "/repos/$org/$repo"; then
   log "Creating repository $org/$repo"
@@ -80,7 +85,7 @@ if [[ $(gitea_api GET "/repos/$org/$repo" | jq -r .empty) == true ]]; then
   log "Seeding $org/$repo from projects/template"
   work=$(mktemp -d)
   cp -a "$LAB_ROOT/projects/template/." "$work/"
-  find "$work" -type f -exec sed -i -e "s/__ORG__/$org/g" -e "s/__REPO__/$repo/g" -e "s/__DOMAIN__/$LAB_DOMAIN/g" {} +
+  find "$work" -type f -exec sed -i -e "s/__ORG__/$org/g" -e "s/__REPO__/$repo/g" -e "s/__DOMAIN__/$LAB_DOMAIN/g" -e "s|__GITEA_URL__|$GITEA_INTERNAL_URL|g" {} +
   git -C "$work" init -q -b main
   git -C "$work" add -A
   git -C "$work" -c user.name="$GITEA_ADMIN_USER" -c user.email="$GITEA_ADMIN_EMAIL" \

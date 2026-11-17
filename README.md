@@ -74,8 +74,19 @@ Gitea UI: http://gitea.internal:3000. The admin password is in `.secrets/gitea-a
 - **Mandatory CI**: the template's workflow runs `lint`, `unit`, `integration` and `e2e` as separate
   jobs (`make lint`, `make test-unit`, `make test-integration`, `make test-e2e`; Floci runs as a service
   for the last two). Every check in `REQUIRED_CHECKS` must be green before a PR can be merged, and
-  even the admin cannot override that. To add perf or security stages, add the job to the workflow,
+  even the admin cannot override that. To add perf or other stages, add the job to the workflow,
   add it to `REQUIRED_CHECKS`, and run `lab project protect <org>`.
+- **Human-owned checks**: the `guard` and `security` jobs run an action from `platform/checks`, a
+  Gitea repo that agents can neither read nor change. The CI runner reads it with a read-only
+  account whose token is only in the runner's git config. `guard` fails agent PRs that touch
+  `.gitea/` or scanner ignore files, delete tests, reduce the number of tests, or add skip/only
+  markers or coverage/security exclusions. `security` runs gitleaks (secrets in the PR's commits)
+  and trivy (HIGH/CRITICAL vulnerable dependencies, misconfigurations, secrets), with pinned and
+  checksum-verified versions. The source is `checks/` in this repo; edit it, then
+  `lab checks publish`. Details: `checks/README.md`.
+- Limits: this stops agents cutting corners, not an agent set on cheating. Such an agent could
+  rewrite `ci.yml` to fake a `guard` job; that change would show in the diff, and the real `guard`
+  would flag it. Agents can also still weaken the assertions inside tests, so review test diffs.
 - **Per-project identity in the VM**: there's an SSH alias `gitea-<org>` with the bot's key, a git
   `includeIf` for `~/work/<org>/`, and a `tea` login named `<org>`. A leaked credential only gives
   access to one project.
@@ -111,6 +122,8 @@ vm/provision/             scripts run inside VMs by cloud-init (golden, agent, c
 vm/tools/agt              worktree + tmux task helper (installed in VMs)
 projects/new-project.sh   Gitea org/bot/repo + VM credentials
 projects/protect.sh       main branch protection + required CI checks
+projects/publish-checks.sh  publish checks/ to platform/checks + runner read access
+checks/                   human-owned CI checks (guard, security) used by every project
 projects/template/        skeleton for new repos (AGENTS.md, CLAUDE.md, mise, direnv, Floci, CI)
 ```
 
