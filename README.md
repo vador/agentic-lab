@@ -70,7 +70,12 @@ Gitea UI: http://gitea.internal:3000. The admin password is in `.secrets/gitea-a
 - **One Gitea org per project or client.** `lab project new` creates the org, a **restricted bot user**
   `bot-<org>` (it only sees this org), an `agents` team with write access, and the repo, seeded from
   `projects/template/`. It also protects `main`: only the admin (you) can push to or merge into
-  `main`, so agents must open PRs (`tea pr create --login <org>`).
+  `main`, so agents must open PRs (`tea pr create --login <org> --repo <org>/<repo>`).
+- **Mandatory CI**: the template's workflow runs `lint`, `unit`, `integration` and `e2e` as separate
+  jobs (`make lint`, `make test-unit`, `make test-integration`, `make test-e2e`; Floci runs as a service
+  for the last two). Every check in `REQUIRED_CHECKS` must be green before a PR can be merged, and
+  even the admin cannot override that. To add perf or security stages, add the job to the workflow,
+  add it to `REQUIRED_CHECKS`, and run `lab project protect <org>`.
 - **Per-project identity in the VM**: there's an SSH alias `gitea-<org>` with the bot's key, a git
   `includeIf` for `~/work/<org>/`, and a `tea` login named `<org>`. A leaked credential only gives
   access to one project.
@@ -104,7 +109,8 @@ vm/build-golden.sh        golden image build
 vm/new-vm.sh, vm/vmctl.sh VM lifecycle
 vm/provision/             scripts run inside VMs by cloud-init (golden, agent, ci)
 vm/tools/agt              worktree + tmux task helper (installed in VMs)
-projects/new-project.sh   Gitea org/bot/repo/protection + VM credentials
+projects/new-project.sh   Gitea org/bot/repo + VM credentials
+projects/protect.sh       main branch protection + required CI checks
 projects/template/        skeleton for new repos (AGENTS.md, CLAUDE.md, mise, direnv, Floci, CI)
 ```
 
@@ -122,6 +128,5 @@ end-to-end**. Points to watch on the first run:
 ## Ideas / next steps
 
 - Pull-through caches for npm (Verdaccio) and PyPI (devpi)
-- Required CI status checks on `main` in branch protection
 - Optional k3s in the CI VM as a "deploy" target
 - Caddy/Traefik in the agent VM for `https://<app>.<project>.test`

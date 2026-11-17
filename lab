@@ -21,6 +21,7 @@ agentlab — isolated agentic-coding lab (KVM VMs + Gitea + CI + cloud emulators
   lab vm list|start|stop|console|snapshot|snapshots|rollback|rmsnap|destroy|ssh-config|golden-list
 
   lab project new <org> [--repo R] [--vm VM] [--no-vm]
+  lab project protect <org> [--repo R] [--checks "..."]   (re)apply main protection + required CI checks
 
 Typical first run:
   lab host install && (log out/in) && lab services up && lab vm golden \
@@ -48,6 +49,7 @@ case "$area/$sub" in
   vm/golden)      exec "$ROOT/vm/build-golden.sh" "$@" ;;
   vm/new)         exec "$ROOT/vm/new-vm.sh" "$@" ;;
   vm/*)           exec "$ROOT/vm/vmctl.sh" "${sub:-help}" "$@" ;;
-  project/new)    exec "$ROOT/projects/new-project.sh" "$@" ;;
+  project/new)     exec "$ROOT/projects/new-project.sh" "$@" ;;
+  project/protect) exec "$ROOT/projects/protect.sh" "$@" ;;
   *) usage ;;
 esac

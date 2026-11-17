@@ -1,37 +1,65 @@
 name: ci
 
+# Every job below is a separate status check on the PR. The checks listed in agentlab's
+# REQUIRED_CHECKS must pass before anyone (including the admin) can merge into main.
+# Adding a job (perf, security, ...)? Also add it to REQUIRED_CHECKS and run: lab project protect <org>
+
 on:
   push:
     branches: [main]
   pull_request:
 
+env:
+  # Dummy credentials: every AWS call goes to the Floci service container.
+  AWS_ENDPOINT_URL: http://floci:4566
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  AWS_REGION: us-east-1
+  AWS_DEFAULT_REGION: us-east-1
+
 jobs:
-  test:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2   # installs the toolchain from mise.toml
+      - run: make lint
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: make test-unit
+
+  integration:
     runs-on: ubuntu-latest
     services:
       floci:
         image: floci/floci:latest
         env:
           FLOCI_STORAGE_MODE: memory
-    env:
-      AWS_ENDPOINT_URL: http://floci:4566
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
-      AWS_REGION: us-east-1
-      AWS_DEFAULT_REGION: us-east-1
     steps:
       - uses: actions/checkout@v4
-
+      - uses: jdx/mise-action@v2
       - name: Wait for Floci
         run: |
-          for i in $(seq 1 30); do
-            curl -s -o /dev/null http://floci:4566/ && exit 0
-            sleep 2
-          done
+          for i in $(seq 1 30); do curl -s -o /dev/null http://floci:4566/ && exit 0; sleep 2; done
           echo "Floci did not start" >&2; exit 1
+      - run: make test-integration
 
-      - name: Lint
-        run: make lint
-
-      - name: Test
-        run: make test
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      floci:
+        image: floci/floci:latest
+        env:
+          FLOCI_STORAGE_MODE: memory
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Wait for Floci
+        run: |
+          for i in $(seq 1 30); do curl -s -o /dev/null http://floci:4566/ && exit 0; sleep 2; done
+          echo "Floci did not start" >&2; exit 1
+      - run: make test-e2e

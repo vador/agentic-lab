@@ -90,16 +90,8 @@ if [[ $(gitea_api GET "/repos/$org/$repo" | jq -r .empty) == true ]]; then
   rm -rf "$work"
 fi
 
-# --- protect main: only the admin pushes/merges; agents go through PRs -------------------------
-if ! gitea_api GET "/repos/$org/$repo/branch_protections" | jq -e 'any(.[]; .rule_name == "main" or .branch_name == "main")' >/dev/null; then
-  log "Protecting main"
-  gitea_api POST "/repos/$org/$repo/branch_protections" "$(jq -n --arg a "$GITEA_ADMIN_USER" '{
-      rule_name:"main", branch_name:"main",
-      enable_push:true, enable_push_whitelist:true, push_whitelist_usernames:[$a],
-      enable_merge_whitelist:true, merge_whitelist_usernames:[$a],
-      block_on_rejected_reviews:true, block_on_outdated_branch:false
-    }')" >/dev/null
-fi
+# --- protect main: only the admin pushes/merges, required CI checks must pass ------------------
+"$LAB_ROOT/projects/protect.sh" "$org" --repo "$repo"
 
 # --- bot credentials: API token (for tea/PRs) + SSH key (for git) -----------------------------
 if [[ ! -s $tokf ]]; then
@@ -155,6 +147,6 @@ EOF
 if ((use_vm)); then
   cat <<EOF
   In '$vm':   ~/work/$org/$repo/main   — start a task: ssh $vm -t agt new $( [[ $repo == "$org" ]] && echo "$org" || echo "$org/$repo" ) feat/first-task
-  PRs:        tea pr create --login $org   (from inside a worktree)
+  PRs:        tea pr create --login $org --repo $org/$repo   (from inside a worktree)
 EOF
 fi
