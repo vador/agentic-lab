@@ -10,7 +10,7 @@ sudo apt-get update
 sudo apt-get install -y \
   git curl jq ca-certificates gnupg nftables openssh-client \
   qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients dnsmasq-base \
-  virtinst virt-manager
+  virtinst virt-manager ovmf
 
 if ! command -v docker >/dev/null; then
   log "Installing Docker Engine (official repository)"

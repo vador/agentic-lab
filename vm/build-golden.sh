@@ -25,11 +25,13 @@ ensure_base_image() {
 }
 
 ensure_base_image
+ensure_uefi_firmware
+mapfile -t UEFI < <(uefi_args)
 
 build="${VM_PREFIX}golden-build"
 if vsh dominfo "$build" >/dev/null 2>&1; then
   die "a previous build VM '$build' exists. Inspect it (virsh console $build) or remove it:
-   virsh destroy $build; virsh undefine $build --remove-all-storage"
+   virsh destroy $build; virsh undefine $build --nvram --remove-all-storage"
 fi
 
 vol="golden-$(date +%Y%m%d-%H%M).qcow2"
@@ -52,7 +54,7 @@ cloudinit_meta_data "$tmp/meta-data" golden
 
 log "Booting build VM (provisioning takes ~5-15 min; it powers off when done)"
 vinst --name "$build" --memory 4096 --vcpus 4 --cpu host-passthrough \
-  --osinfo linux2022 --import \
+  --osinfo linux2022 --import "${UEFI[@]}" \
   --disk "vol=$LAB_POOL_NAME/$vol,bus=virtio" \
   --network "network=$LAB_NET_NAME,model=virtio" \
   --graphics none --console pty,target_type=serial \
@@ -62,6 +64,17 @@ vinst --name "$build" --memory 4096 --vcpus 4 --cpu host-passthrough \
 if ! wait_for_state "$build" "shut off" 2700; then
   die "build did not finish in 45 min. Debug with: virsh console $build  (log: /var/log/cloud-init-output.log)"
 fi
-vsh undefine "$build" >/dev/null
-log "Golden image ready: $vol"
+
+# A crashed/failed qemu also ends in "shut off": only a guest-initiated shutdown counts,
+# and the provisioning must have actually written to the disk.
+reason=$(vsh domstate "$build" --reason)
+vsh pool-refresh "$LAB_POOL_NAME" >/dev/null
+alloc=$(vsh vol-dumpxml --pool "$LAB_POOL_NAME" "$vol" | grep -oP '<allocation unit=.bytes.>\K[0-9]+')
+if [[ $reason != *"(shutdown)"* || ${alloc:-0} -lt 500000000 ]]; then
+  die "build FAILED: VM state '$reason', disk written $((${alloc:-0} / 1024 / 1024)) MiB.
+   QEMU log:  sudo tail -n 50 /var/log/libvirt/qemu/$build.log
+   Clean up:  virsh undefine $build --nvram; virsh vol-delete --pool $LAB_POOL_NAME $vol"
+fi
+vsh undefine "$build" --nvram >/dev/null
+log "Golden image ready: $vol ($((alloc / 1024 / 1024)) MiB)"
 log "Next: lab vm new agent   and   lab vm new ci --role ci"

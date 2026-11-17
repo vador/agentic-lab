@@ -78,8 +78,10 @@ if [[ $role != base ]]; then
 fi
 cloudinit_meta_data "$tmp/meta-data" "$name"
 
+ensure_uefi_firmware
+mapfile -t UEFI < <(uefi_args)
 vinst --name "$dom" --memory "$ram" --vcpus "$cpus" --cpu host-passthrough \
-  --osinfo linux2022 --import \
+  --osinfo linux2022 --import "${UEFI[@]}" \
   --disk "vol=$LAB_POOL_NAME/$dom.qcow2,bus=virtio,discard=unmap" \
   --network "network=$LAB_NET_NAME,model=virtio,mac=$mac" \
   --channel unix,target.type=virtio,target.name=org.qemu.guest_agent.0 \

@@ -90,7 +90,7 @@ case $cmd in
     ip=$(reserved_hosts | awk -F'|' -v n="$name" '$1 == n {print $2}')
     if [[ $(vsh domstate "$d") == running ]]; then vsh destroy "$d" >/dev/null; fi
     for s in $(vsh snapshot-list "$d" --name 2>/dev/null); do vsh snapshot-delete "$d" "$s" >/dev/null; done
-    vsh undefine "$d" --remove-all-storage >/dev/null
+    vsh undefine "$d" --nvram --remove-all-storage >/dev/null
     if [[ -n $mac && -n $ip ]]; then
       vsh net-update "$LAB_NET_NAME" delete ip-dhcp-host "<host mac='$mac' name='$name' ip='$ip'/>" --live --config >/dev/null || true
       ssh-keygen -R "$ip" -f ~/.ssh/known_hosts.agentlab >/dev/null 2>&1 || true

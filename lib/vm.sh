@@ -3,6 +3,48 @@
 
 BASE_VOL="debian-13-base.qcow2"
 
+# ---- UEFI firmware ------------------------------------------------------------------------------
+# VMs boot with UEFI: legacy SeaBIOS boot of the Debian 13 cloud image reset-loops on this host
+# (kernel 7.2). libvirt only allows internal snapshots of UEFI VMs when the NVRAM is qcow2, and
+# Debian ships OVMF as raw only — so we keep qcow2 copies of OVMF in the lab pool (mode 0644,
+# because libvirt does not relabel the loader file).
+OVMF_CODE_VOL="ovmf-code-4m.qcow2"
+OVMF_VARS_VOL="ovmf-vars-4m.qcow2"
+
+ensure_uefi_firmware() {
+  local kind src vol tmp
+  for kind in CODE VARS; do
+    src="/usr/share/OVMF/OVMF_${kind}_4M.fd"
+    vol="ovmf-${kind,,}-4m.qcow2"
+    vsh vol-info --pool "$LAB_POOL_NAME" "$vol" >/dev/null 2>&1 && continue
+    [[ -r $src ]] || die "missing $src (apt install ovmf)"
+    log "Adding qcow2 copy of $(basename "$src") to pool $LAB_POOL_NAME"
+    tmp=$(mktemp -d)
+    qemu-img convert -f raw -O qcow2 "$src" "$tmp/fw.qcow2"
+    cat >"$tmp/vol.xml" <<EOF
+<volume>
+  <name>$vol</name>
+  <capacity unit='bytes'>$(stat -c%s "$tmp/fw.qcow2")</capacity>
+  <target><format type='raw'/><permissions><mode>0644</mode></permissions></target>
+</volume>
+EOF
+    vsh vol-create "$LAB_POOL_NAME" "$tmp/vol.xml" >/dev/null
+    vsh vol-upload --pool "$LAB_POOL_NAME" "$vol" "$tmp/fw.qcow2"
+    rm -rf "$tmp"
+  done
+  vsh pool-refresh "$LAB_POOL_NAME" >/dev/null
+}
+
+# virt-install arguments for UEFI boot with qcow2 NVRAM
+uefi_args() {
+  local p=$LAB_POOL_DIR
+  printf '%s\n' \
+    --boot "loader=$p/$OVMF_CODE_VOL,loader.readonly=yes,loader.type=pflash,nvram.template=$p/$OVMF_VARS_VOL" \
+    --xml ./os/loader/@format=qcow2 \
+    --xml ./os/nvram/@templateFormat=qcow2 \
+    --xml ./os/nvram/@format=qcow2
+}
+
 latest_golden() {
   vsh vol-list --pool "$LAB_POOL_NAME" | awk '$1 ~ /^golden-.*\.qcow2$/ {print $1}' | sort | tail -n1 | grep .
 }
