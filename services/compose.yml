@@ -1,0 +1,87 @@
+# Trusted host services. Started with `lab services up` (which generates ./.env).
+# Everything is published on 127.0.0.1 and the lab gateway IP only — never on your LAN interface.
+name: agentlab
+
+services:
+  gitea-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gitea
+      POSTGRES_PASSWORD: ${GITEA_DB_PASSWORD:?run lab services up}
+      POSTGRES_DB: gitea
+    volumes:
+      - gitea-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitea"]
+      interval: 5s
+      retries: 30
+
+  gitea:
+    image: ${GITEA_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      gitea-db:
+        condition: service_healthy
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: gitea-db:5432
+      GITEA__database__NAME: gitea
+      GITEA__database__USER: gitea
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      GITEA__server__DOMAIN: gitea.${LAB_DOMAIN}
+      GITEA__server__ROOT_URL: http://gitea.${LAB_DOMAIN}:${GITEA_HTTP_PORT}/
+      GITEA__server__SSH_DOMAIN: gitea.${LAB_DOMAIN}
+      GITEA__server__SSH_PORT: ${GITEA_SSH_PORT}
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "true"
+      GITEA__repository__DEFAULT_BRANCH: main
+      GITEA__actions__ENABLED: "true"
+      GITEA__packages__ENABLED: "true"
+    volumes:
+      - gitea-data:/data
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "127.0.0.1:${GITEA_HTTP_PORT}:3000"
+      - "${LAB_GW_IP}:${GITEA_HTTP_PORT}:3000"
+      - "127.0.0.1:${GITEA_SSH_PORT}:22"
+      - "${LAB_GW_IP}:${GITEA_SSH_PORT}:22"
+
+  # Pull-through cache for Docker Hub: VMs and CI jobs pull through it (avoids rate limits).
+  registry-mirror:
+    image: registry:3
+    restart: unless-stopped
+    environment:
+      REGISTRY_PROXY_REMOTEURL: https://registry-1.docker.io
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    volumes:
+      - registry-data:/var/lib/registry
+    ports:
+      - "${LAB_GW_IP}:${REGISTRY_PORT}:5000"
+
+  # Optional local LLMs on the RTX 4070 Super. Needs host/install-nvidia.sh first.
+  ollama:
+    profiles: ["gpu"]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT}:11434"
+      - "${LAB_GW_IP}:${OLLAMA_PORT}:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  gitea-db:
+  gitea-data:
+  registry-data:
+  ollama-data:

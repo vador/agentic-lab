@@ -1,0 +1,4 @@
+# local configuration and generated secrets — never commit
+config.env
+.secrets/
+services/.env

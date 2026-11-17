@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# agentlab — entry point.  Tip: ln -s "$PWD/lab" ~/.local/bin/lab
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+usage() {
+  cat <<'USAGE'
+agentlab — isolated agentic-coding lab (KVM VMs + Gitea + CI + cloud emulators)
+
+  lab host install               packages, Docker, libvirt network/pool, firewall (sudo)
+  lab host nvidia                OPTIONAL: proprietary NVIDIA driver + container toolkit
+  lab host firewall              re-apply the nftables isolation rules
+  lab host network               re-create the libvirt network / storage pool
+
+  lab services up [--gpu]        start Gitea, Postgres, registry mirror (+ Ollama) and bootstrap Gitea
+  lab services down|ps|logs [svc]
+  lab services backup            gitea dump + secrets to $BACKUP_DIR
+
+  lab vm golden                  build a new golden image (Debian 13 + Docker, mise, Node, AI CLIs)
+  lab vm new <name> [--role agent|ci|base] [...]
+  lab vm list|start|stop|console|snapshot|snapshots|rollback|rmsnap|destroy|ssh-config|golden-list
+
+  lab project new <org> [--repo R] [--vm VM] [--no-vm]
+
+Typical first run:
+  lab host install && (log out/in) && lab services up && lab vm golden \
+    && lab vm new ci --role ci && lab vm new agent && lab project new demo
+USAGE
+}
+
+area=${1:-help}; shift || true
+sub=${1:-}; shift || true
+case "$area/$sub" in
+  host/install)   exec "$ROOT/host/install.sh" "$@" ;;
+  host/nvidia)    exec "$ROOT/host/install-nvidia.sh" "$@" ;;
+  host/firewall)  exec "$ROOT/host/firewall.sh" "$@" ;;
+  host/network)   exec "$ROOT/host/network.sh" "$@" ;;
+  services/up)     exec "$ROOT/services/up.sh" "$@" ;;
+  services/backup) exec "$ROOT/services/backup.sh" "$@" ;;
+  services/down|services/ps|services/logs)
+    source "$ROOT/lib/common.sh"
+    cd "$ROOT/services"
+    case $sub in
+      down) dk compose --profile gpu down ;;
+      ps)   dk compose --profile gpu ps ;;
+      logs) dk compose --profile gpu logs -f --tail=100 "$@" ;;
+    esac ;;
+  vm/golden)      exec "$ROOT/vm/build-golden.sh" "$@" ;;
+  vm/new)         exec "$ROOT/vm/new-vm.sh" "$@" ;;
+  vm/*)           exec "$ROOT/vm/vmctl.sh" "${sub:-help}" "$@" ;;
+  project/new)    exec "$ROOT/projects/new-project.sh" "$@" ;;
+  *) usage ;;
+esac

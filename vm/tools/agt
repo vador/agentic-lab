@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# agt — one git worktree + one tmux window per agent task (runs inside the agent VM).
+set -euo pipefail
+WORK="${AGT_WORK:-$HOME/work}"
+AGENT="${AGT_AGENT:-claude}"
+
+die() { echo "agt: $*" >&2; exit 1; }
+usage() {
+  cat <<'EOF'
+Usage:
+  agt new <org>[/<repo>] <branch> [agent command...]   worktree + tmux window, starts the agent
+  agt ls [<org>[/<repo>]]                              list worktrees
+  agt rm <org>[/<repo>] <branch> [--force]             remove worktree (+ local branch if merged)
+  agt attach <org>[/<repo>]                            attach to the project's tmux session
+
+Layout:  ~/work/<org>/<repo>/main        clone (created by `lab project new` on the host)
+         ~/work/<org>/<repo>/wt-<branch> one worktree per task
+<repo> defaults to <org>. Agent command defaults to $AGT_AGENT, else "claude".
+Examples: agt new shop feat/cart        agt new shop/api fix/login codex
+EOF
+}
+
+resolve() {
+  local p=$1
+  org=${p%%/*}
+  if [[ $p == */* ]]; then repo=${p#*/}; else repo=$org; fi
+  root="$WORK/$org/$repo"
+  main="$root/main"
+  if [[ $org == "$repo" ]]; then session=$org; else session="${org}_${repo}"; fi
+  [[ -d $main/.git ]] || die "no clone at $main (run 'lab project new $org' on the host)"
+}
+
+cmd_new() {
+  [[ $# -ge 2 ]] || { usage; exit 1; }
+  resolve "$1"
+  local branch=$2
+  shift 2
+  local agent="${*:-$AGENT}"
+  local slug=${branch//\//-}
+  local wt="$root/wt-$slug"
+
+  git -C "$main" fetch -q origin
+  if [[ ! -d $wt ]]; then
+    if git -C "$main" show-ref -q --verify "refs/heads/$branch"; then
+      git -C "$main" worktree add -q "$wt" "$branch"
+    elif git -C "$main" show-ref -q --verify "refs/remotes/origin/$branch"; then
+      git -C "$main" worktree add -q --track -b "$branch" "$wt" "origin/$branch"
+    else
+      local base
+      base=$(git -C "$main" symbolic-ref -q --short refs/remotes/origin/HEAD || echo origin/main)
+      git -C "$main" worktree add -q --no-track -b "$branch" "$wt" "$base"
+    fi
+    echo "worktree: $wt"
+  fi
+  if [[ -f $wt/.envrc ]] && command -v direnv >/dev/null; then direnv allow "$wt"; fi
+
+  tmux has-session -t "=$session" 2>/dev/null || tmux new-session -d -s "$session" -n main -c "$main"
+  if ! tmux list-windows -t "=$session" -F '#W' | grep -qx "$slug"; then
+    tmux new-window -d -t "$session:" -n "$slug" -c "$wt"
+    tmux send-keys -t "$session:$slug" "$agent" Enter
+  fi
+  if [[ -n ${TMUX:-} ]]; then tmux switch-client -t "$session:$slug"; else tmux attach -t "$session:$slug"; fi
+}
+
+cmd_rm() {
+  [[ $# -ge 2 ]] || { usage; exit 1; }
+  resolve "$1"
+  local branch=$2 force=${3:-}
+  local slug=${branch//\//-}
+  local wt="$root/wt-$slug"
+  tmux kill-window -t "$session:$slug" 2>/dev/null || true
+  if [[ $force == --force ]]; then git -C "$main" worktree remove --force "$wt"; else git -C "$main" worktree remove "$wt"; fi
+  git -C "$main" fetch -q origin
+  if git -C "$main" branch -d "$branch" 2>/dev/null; then
+    echo "deleted merged branch $branch"
+  else
+    echo "kept branch $branch (not merged — delete with: git -C $main branch -D $branch)"
+  fi
+}
+
+cmd_ls() {
+  if [[ -n ${1:-} ]]; then
+    resolve "$1"
+    git -C "$main" worktree list
+    return
+  fi
+  local m
+  for m in "$WORK"/*/*/main; do
+    [[ -d $m/.git ]] || continue
+    echo "== ${m#"$WORK"/}" | sed 's#/main$##'
+    git -C "$m" worktree list | sed 's/^/   /'
+  done
+}
+
+cmd=${1:-help}
+shift || true
+case $cmd in
+  new) cmd_new "$@" ;;
+  rm) cmd_rm "$@" ;;
+  ls) cmd_ls "$@" ;;
+  attach) resolve "${1:?project}"; tmux attach -t "=$session" ;;
+  help | -h | --help) usage ;;
+  *) usage; exit 1 ;;
+esac

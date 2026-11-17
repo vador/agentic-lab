@@ -1,0 +1,12 @@
+# Local emulators for this worktree. Project name and port come from .envrc.
+services:
+  floci:
+    image: floci/floci:latest        # pin a version (floci/floci:x.y.z) once things work
+    ports:
+      - "127.0.0.1:${FLOCI_PORT:-4566}:4566"
+    environment:
+      FLOCI_DEFAULT_REGION: us-east-1
+      FLOCI_STORAGE_MODE: memory
+    # Lambda/RDS/ECS emulation runs real containers and needs the Docker socket:
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock

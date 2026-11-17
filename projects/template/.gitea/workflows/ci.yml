@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      floci:
+        image: floci/floci:latest
+        env:
+          FLOCI_STORAGE_MODE: memory
+    env:
+      AWS_ENDPOINT_URL: http://floci:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for Floci
+        run: |
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null http://floci:4566/ && exit 0
+            sleep 2
+          done
+          echo "Floci did not start" >&2; exit 1
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
